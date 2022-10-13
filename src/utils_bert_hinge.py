@@ -1,4 +1,4 @@
-from transformers.modeling_bert import *
+from transformers.models.bert.modeling_bert import *
 import torch.nn.functional as F
 from torch.nn import MarginRankingLoss
 

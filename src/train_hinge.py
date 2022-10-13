@@ -15,7 +15,7 @@
 """ Finetuning the library models for sequence classification on GLUE."""
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 #### version 3.5.1
-
+import gc
 import logging
 import os
 import random
@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
+import torch
 from datasets import load_dataset, load_metric
 
 import transformers

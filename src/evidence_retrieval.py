@@ -1,22 +1,23 @@
 import io, json, codecs, os
 import random
-ave = lambda x : sum(x)/len(x)
-codecs_out = lambda x : codecs.open(x, 'w', 'utf-8')
-codecs_in = lambda x : codecs.open(x, 'r', 'utf-8')
 
-json_load = lambda x : json.load(codecs.open(x, 'r', 'utf-8'))
+ave = lambda x: sum(x) / len(x)
+codecs_out = lambda x: codecs.open(x, 'w', 'utf-8')
+codecs_in = lambda x: codecs.open(x, 'r', 'utf-8')
+
+json_load = lambda x: json.load(codecs.open(x, 'r', 'utf-8'))
 json_dump = lambda d, p: json.dump(d, codecs.open(p, 'w', 'utf-8'), indent=2, ensure_ascii=False)
 json_dumps = lambda d: json.dumps(d, indent=2, ensure_ascii=False)
 json_dumpsl = lambda d: json.dumps(d, ensure_ascii=False)
-
 
 import re
 from tqdm import tqdm
 import numpy as np
 from pprint import pprint
 import pickle as pk
-import jieba 
+import jieba
 from sentence_transformers import SentenceTransformer, util
+
 
 # https://cloud.tencent.com/developer/article/1530340
 def sent_tokenize(para):
@@ -41,11 +42,14 @@ simple_stop_list = [c for c in punctuations]
 for line in open('../data/external/stop_words.txt', 'r', encoding='utf-8'):
     simple_stop_list.append(line.strip())
 
+
 def softmax(x):
-    return np.exp(x)/sum(np.exp(x))
+    return np.exp(x) / sum(np.exp(x))
+
 
 def cosine_similarity(a, b):
     return np.dot(a, b) / np.linalg.norm(a) / np.linalg.norm(b)
+
 
 class Embedding:
     def __init__(self, word_list, vector_list):
@@ -55,7 +59,7 @@ class Embedding:
         self.id2word[0] = '[UNK]'
         for i, w in enumerate(word_list):
             self.word2id[w] = i + 1
-            self.id2word[i+1] = w
+            self.id2word[i + 1] = w
         avg_vector = np.array(vector_list[0])
         for i in range(1, len(vector_list)):
             avg_vector += np.array(vector_list[i])
@@ -102,13 +106,14 @@ class DenseEmbedder:
             encoded_words.append(self.embedding[w])
         return encoded_words
 
+
 def search_evidence(queries, context_sents, dense_encoded_sents, dense_embedder, bert_embedder, beam_size=2):
     retrieved_evidence = []
     for query in queries:
         candidates = []
         # first retrieval
         query_tokens = dense_embedder.remove_stop_words(query)
-        first_step_dense_encoded_query =  dense_embedder.encode(query)
+        first_step_dense_encoded_query = dense_embedder.encode(query)
         first_step_results = []
         for i, dense_encoded_sent in enumerate(dense_encoded_sents):
             sim = cosine_similarity(first_step_dense_encoded_query, dense_encoded_sent)
@@ -158,27 +163,30 @@ def search_evidence(queries, context_sents, dense_encoded_sents, dense_embedder,
             final_results.append((cand, float(sim[0][0].item()), step_cnt))
         final_results = sorted(final_results, key=lambda x: x[1], reverse=True)
 
-        retrieved_evidence.append([{'text': text, 'score': score, 'step_cnt': step_cnt} for text, score, step_cnt in final_results])
+        retrieved_evidence.append(
+            [{'text': text, 'score': score, 'step_cnt': step_cnt} for text, score, step_cnt in final_results])
     return retrieved_evidence
+
 
 def iteratively_retrieve_evidence(original_data_path, save_data_path):
     dataset = json_load(original_data_path)
     new_dataset = {
-        'version': dataset['version'] + ' with iteratively retrieved evidence', 
+        'version': dataset['version'] + ' with iteratively retrieved evidence',
         'data': []
     }
     for item in tqdm(dataset['data']):
         context_sents = sent_tokenize(item['context'])
         dense_encoded_sents = [dense_embedder.encode(s) for s in context_sents]
         for j, qas in enumerate(item['qas']):
-            iterative_retrieved_evidence = search_evidence(qas['options'], context_sents, dense_encoded_sents, dense_embedder, bert_embedder, beam_size=2)
+            iterative_retrieved_evidence = search_evidence(qas['options'], context_sents, dense_encoded_sents,
+                                                           dense_embedder, bert_embedder, beam_size=2)
             item['qas'][j]['iteratively_retrieved_evidence'] = iterative_retrieved_evidence
         new_dataset['data'].append(item)
     json_dump(new_dataset, save_data_path)
 
-   
+
 if __name__ == '__main__':
-    
+
     '''
     Loading external resources:
     1. Word vectors
@@ -193,15 +201,18 @@ if __name__ == '__main__':
     '''
 
     word_list = pk.load(open("../data/external/word_vectors/sgns.merge.char_word-list", 'rb'))
-    print(len(word_list))
+    print('total length of word:', len(word_list))
     vector_list = pk.load(open("../data/external/word_vectors/sgns.merge.char_vector-list", 'rb'))
     print("vector loaded")
     embedding = Embedding(word_list, vector_list)
     dense_embedder = DenseEmbedder(embedding, jieba.cut, simple_stop_list)
+    print('vector embedded')
     if os.path.exists('../data/external/distiluse-base-multilingual-cased-v1'):
         bert_embedder = SentenceTransformer('../data/external/distiluse-base-multilingual-cased-v1')
+        print('model loaded locally')
     else:
         bert_embedder = SentenceTransformer('distiluse-base-multilingual-cased-v1')
+        print('model loaded online')
     # If you cannot download the model with SentenceTransformer,
     # you can download the model from
     # https://public.ukp.informatik.tu-darmstadt.de/reimers/sentence-transformers/v0.2/
@@ -213,4 +224,3 @@ if __name__ == '__main__':
     '''
     iteratively_retrieve_evidence('../data/raw/train.json', '../data/processed/train_mrc_iterative.json')
     iteratively_retrieve_evidence('../data/raw/test.json', '../data/processed/test_mrc_iterative.json')
-
